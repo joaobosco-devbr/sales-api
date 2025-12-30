@@ -23,7 +23,9 @@ def prepare_db():
     except:
         pass
 
+@pytest.mark.integration
 def test_signup_and_product_crud():
+
     # signup
     r = client.post("/signup", json={"username":"testuser","password":"secret"})
     assert r.status_code == 200
