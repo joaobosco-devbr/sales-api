@@ -89,7 +89,7 @@ services:
 
 1. Clone o repositório:
 ```bash
-git clone https://github.com/joaobosco1993/sales-api.git
+git clone https://github.com/joaobosco-devbr/sales-api.git
 ```
 
 2. Acesse o diretório do projeto:
