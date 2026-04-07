@@ -3,12 +3,11 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
-from app.database import engine
 from app.schemas import OrderCreate, OrderRead
 from app.models import User
 from app.crud import (
     create_order,
-    get_orders,
+    get_orders_by_user,
     get_order,
     delete_order,
 )
@@ -21,12 +20,7 @@ router = APIRouter(
 )
 
 
-def get_db():
-    with Session(engine) as session:
-        yield session
-
-
-@router.post("", response_model=OrderRead)
+@router.post("", response_model=OrderRead, status_code=201)
 def place_order(
     order_in: OrderCreate,
     session: Session = Depends(get_db),
@@ -36,23 +30,7 @@ def place_order(
         order = create_order(current_user.id, order_in, session)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-    items = [
-        {
-            "id": item.id,
-            "product_id": item.product_id,
-            "quantity": item.quantity,
-            "price": item.price,
-        }
-        for item in order.items
-    ]
-
-    return {
-        "id": order.id,
-        "user_id": order.user_id,
-        "total": order.total,
-        "items": items,
-    }
+    return order
 
 
 @router.get("", response_model=List[OrderRead])
@@ -60,27 +38,28 @@ def my_orders(
     session: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    orders = get_orders_by_user(current_user.id, session)
+    return get_orders_by_user(current_user.id, session)
 
-    result = []
-    for order in orders:
-        items = [
-            {
-                "id": item.id,
-                "product_id": item.product_id,
-                "quantity": item.quantity,
-                "price": item.price,
-            }
-            for item in order.items
-        ]
-        result.append(
-            {
-                "id": order.id,
-                "user_id": order.user_id,
-                "total": order.total,
-                "items": items,
-            }
-        )
 
-    return result
+@router.get("/{order_id}", response_model=OrderRead)
+def get_order_endpoint(
+    order_id: int,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    order = get_order(order_id, session)
+    if not order or order.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order
 
+
+@router.delete("/{order_id}", status_code=204)
+def cancel_order(
+    order_id: int,
+    session: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    order = get_order(order_id, session)
+    if not order or order.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Order not found")
+    delete_order(order_id, session)
