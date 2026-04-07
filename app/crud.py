@@ -102,9 +102,37 @@ def delete_product(product_id: int, session: Session):
 # ORDERS
 # =========================
 
-def create_order(order_in: OrderCreate, session: Session):
-    order = Order.from_orm(order_in)
+def create_order(user_id: int, order_in: OrderCreate, session: Session):
+    total = 0.0
+    items_data = []
+
+    for item in order_in.items:
+        product = session.get(Product, item.product_id)
+        if not product:
+            raise ValueError(f"Product {item.product_id} not found")
+        if product.stock < item.quantity:
+            raise ValueError(
+                f"Insufficient stock for product '{product.name}': "
+                f"requested {item.quantity}, available {product.stock}"
+            )
+        total += product.price * item.quantity
+        items_data.append((product, item.quantity, product.price))
+
+    order = Order(user_id=user_id, total=round(total, 2))
     session.add(order)
+    session.flush()
+
+    for product, quantity, price in items_data:
+        order_item = OrderItem(
+            order_id=order.id,
+            product_id=product.id,
+            quantity=quantity,
+            price=price,
+        )
+        session.add(order_item)
+        product.stock -= quantity
+        session.add(product)
+
     session.commit()
     session.refresh(order)
     return order
@@ -112,6 +140,12 @@ def create_order(order_in: OrderCreate, session: Session):
 
 def get_orders(session: Session):
     return session.exec(select(Order)).all()
+
+
+def get_orders_by_user(user_id: int, session: Session):
+    return session.exec(
+        select(Order).where(Order.user_id == user_id)
+    ).all()
 
 
 def get_order(order_id: int, session: Session):
@@ -147,4 +181,3 @@ def get_order_items(order_id: int, session: Session):
     return session.exec(
         select(OrderItem).where(OrderItem.order_id == order_id)
     ).all()
-
